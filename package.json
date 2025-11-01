@@ -1,0 +1,24 @@
+{
+  "name": "obsidian-share-pdf",
+  "version": "1.0.0",
+  "description": "Convert and save your notes as beautifully formatted PDFs with full markdown support. Works on desktop and mobile with native sharing.",
+  "main": "main.js",
+  "scripts": {
+    "version": "node version-bump.mjs && git add manifest.json versions.json"
+  },
+  "keywords": [
+    "obsidian",
+    "plugin",
+    "pdf",
+    "export",
+    "markdown",
+    "mobile",
+    "share"
+  ],
+  "author": "bodfather",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bodfather/obsidian-share-pdf.git"
+  }
+}

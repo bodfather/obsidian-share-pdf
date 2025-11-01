@@ -1,0 +1,11 @@
+{
+  "id": "share-to-pdf",
+  "name": "Share to PDF",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.0",
+  "description": "Convert and save your notes as beautifully formatted PDFs with full markdown support. Works on desktop and mobile with native sharing.",
+  "author": "bodfather",
+  "authorUrl": "https://github.com/bodfather",
+  "isDesktopOnly": false,
+  "fundingUrl": "https://github.com/bodfather/obsidian-share-pdf"
+}

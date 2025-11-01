@@ -1,0 +1,13 @@
+/* Share to PDF Plugin Styles */
+
+.modal-button-container {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+.modal-button-container button {
+  padding: 8px 16px;
+  cursor: pointer;
+}

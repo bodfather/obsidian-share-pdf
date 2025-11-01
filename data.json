@@ -1,0 +1,12 @@
+{
+  "includeFrontmatter": false,
+  "fontSize": 12,
+  "pdfFolder": "pdfs",
+  "cssOverride": "body {\n  --font-text-theme: Helvetica;\n}",
+  "useTheme": true,
+  "replaceEmojis": false,
+  "colorMode": "auto",
+  "includeTitle": false,
+  "removeWikilinks": false,
+  "marginWidth": "normal"
+}
