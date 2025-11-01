@@ -1,5 +1,9 @@
 # Share to PDF
 
+[![Vibe Coded](https://img.shields.io/badge/🎵_Vibe-Coded-blueviolet?style=for-the-badge)](https://github.com/bodfather/obsidian-share-pdf#-vibe-coded--ai-assisted-development)
+[![AI-Assisted Development](https://img.shields.io/badge/AI-Assisted_Development-00D4FF?style=for-the-badge&logo=anthropic)](https://www.anthropic.com/claude)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](https://opensource.org/licenses/MIT)
+
 Convert and save your Obsidian notes as beautifully formatted PDFs with full support for markdown formatting, images, and code blocks. Works seamlessly on desktop and mobile devices.
 
 ## Features
@@ -173,10 +177,43 @@ obsidian-share-pdf/
 - Check that your OS supports the share API
 - Try updating your Obsidian app
 
+## 🎵 Vibe Coded | AI-Assisted Development
+
+This plugin was developed through **AI-assisted programming** - a collaborative process between human direction and AI implementation.
+
+**The Development Process:**
+
+👨‍💻 **Human (bodfather)**
+- Product vision and feature requirements
+- UX decisions and design direction
+- Testing, debugging, and quality assurance
+- Architecture decisions and technical approach
+
+🤖 **AI Assistant (Claude)**
+- Code implementation and generation
+- PDF generation logic and jsPDF integration
+- Theme color extraction and parsing
+- Documentation and README creation
+
+**Transparency Commitment:**
+
+We believe in being honest about development processes. This plugin was built using Claude AI assistance, and we're proud of it! AI-assisted development is the future of software creation.
+
+**Want to build your own vibe-coded project?**
+
+Add this badge to your README:
+
+```markdown
+[![Vibe Coded](https://img.shields.io/badge/🎵_Vibe-Coded-blueviolet?style=for-the-badge)](https://github.com/bodfather/obsidian-share-pdf#-vibe-coded--ai-assisted-development)
+```
+
+---
+
 ## Credits
 
 - Built with [jsPDF](https://github.com/parallax/jsPDF) for PDF generation
 - Uses Obsidian Plugin API
+- Developed in collaboration with Claude AI
 - Inspired by the need for better mobile PDF sharing
 
 ## License
