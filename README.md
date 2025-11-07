@@ -9,12 +9,17 @@ Convert and save your Obsidian notes as beautifully formatted PDFs with full sup
 ## Features
 
 - **Complete Markdown Support**: Bold, italic, headings, lists, blockquotes, code blocks, and more
+- **Footnote Support**: Automatic footnote formatting with references as superscript and definitions at page bottom
 - **Image Handling**: Embedded images with automatic base64 conversion
 - **Theme Integration**: Automatically matches your Obsidian theme colors
 - **Custom Styling**: Configure fonts, sizes, margins, and spacing
+- **Flexible PDF Naming**: Choose from 4 naming styles including date preservation and H1 extraction
+- **Page Numbers**: Optional page numbers with customizable alignment (left, center, right)
+- **Advanced List Formatting**: Proper indentation, hierarchical bullet opacity, and numbered list display
+- **Proportional Typography**: Font size, line height, and spacing scale proportionally for optimal readability
 - **Smart Page Breaks**: Avoid awkward splits in content
 - **Mobile Sharing**: Native share functionality on Android and iOS
-- **Overwrite Protection**: Optional confirmation before replacing existing PDFs
+- **Overwrite Protection**: Optional confirmation before replacing existing PDFs with rename option
 - **Customizable Output**: Control PDF location, paper size, and margins
 
 ## Installation
@@ -55,6 +60,11 @@ On mobile devices, after the PDF is saved, the native share dialog will automati
 ### Output Settings
 
 - **PDF Output Folder**: Choose where PDFs are saved (default: `PDFs`)
+- **PDF Naming Style**: Choose how to name exported PDFs:
+  - Use filename (keeps original kebab-case format)
+  - Sentence-case filename (removes date prefix, converts to Title Case)
+  - Sentence-case (date prefix) (keeps date prefix like `2024-11-05`, converts rest to Title Case)
+  - Use first H1 in document (uses the first heading as filename)
 - **Warn before overwriting**: Show confirmation dialog before replacing existing PDF files
 
 ### Page Settings
@@ -78,9 +88,13 @@ On mobile devices, after the PDF is saved, the native share dialog will automati
 
 ### Content Options
 
-- **Include Metadata**: Add frontmatter data to the PDF header
-- **Show Page Numbers**: Display page numbers at the bottom
-- **Smart Page Breaks**: Prevent awkward content splits across pages
+- **Include Frontmatter**: Add YAML frontmatter to the PDF
+- **Show Document Title**: Display document name at the top of the PDF
+- **Show Page Numbers**: Display page numbers at the bottom of each page
+- **Page Number Alignment**: Choose left, center, or right alignment for page numbers
+- **Remove Wikilinks**: Option to remove [[wikilink]] formatting from PDFs
+- **Color Mode Override**: Force light or dark mode regardless of current theme
+- **Margin Width**: Choose from narrow, normal (matches Obsidian), or wide margins
 
 ## Supported Markdown Features
 
@@ -95,9 +109,17 @@ All heading levels (H1-H6) with customizable styling
 
 ### Lists
 - Unordered lists with `-`, `*`, or `+`
-- Ordered lists with numbers
-- Nested lists with proper indentation
-- Task lists with `- [ ]` and `- [x]`
+- Ordered lists with numbers (displays actual numbers)
+- Nested lists with proper indentation (2-space or 4-space/tab)
+- Hierarchical bullet opacity (100% → 75% → 50% for nested levels)
+- Wrapped text properly aligned with list content
+
+### Footnotes
+- Inline footnote references with `[^1]` (rendered as superscript)
+- Footnote definitions with `[^1]: Footnote text`
+- Automatic positioning at the bottom of each page
+- Smart space reservation to keep footnotes visible
+- Proper text wrapping with aligned continuation lines
 
 ### Blockquotes
 > Blockquotes with `>` prefix
@@ -226,6 +248,25 @@ MIT License - see [LICENSE](LICENSE) file for details
 - For general questions, visit the [Obsidian forum](https://forum.obsidian.md/)
 
 ## Changelog
+
+### 1.1.0
+- **New Feature**: Footnote support with automatic page-based positioning
+  - Footnote references rendered as superscript numbers
+  - Footnote definitions automatically placed at bottom of each page
+  - Smart space reservation ensures footnotes don't overflow
+  - Proper text wrapping with aligned continuation lines
+- **New Feature**: Page numbers with customizable alignment (left, center, right)
+- **New Feature**: PDF naming styles - Choose from 4 different ways to name your PDFs:
+  - Keep original filename
+  - Sentence-case (removes date prefix)
+  - Sentence-case with date prefix preserved
+  - Use first H1 heading from document
+- **New Feature**: File rename option in overwrite confirmation dialog
+- **Improved**: List formatting with proper indentation and hierarchical bullet opacity
+- **Improved**: Numbered lists now display actual numbers instead of bullets
+- **Improved**: Wrapped list text aligns with content (not markers)
+- **Fixed**: Typography scaling - Line height and paragraph spacing now scale proportionally with font size
+- **Improved**: Mobile-friendly PDF export with better readability at all font sizes
 
 ### 1.0.0 (Initial Release)
 - Complete markdown to PDF conversion

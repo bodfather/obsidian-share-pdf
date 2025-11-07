@@ -42,7 +42,9 @@ var DEFAULT_SETTINGS = {
   removeWikilinks: false, // Remove all wikilinks from PDF
   marginWidth: "normal", // "narrow", "normal", "wide"
   warnOnOverwrite: true, // Warn before overwriting existing PDFs
-  pdfNamingStyle: "filename" // "filename", "sentence-case", or "first-h1"
+  pdfNamingStyle: "filename", // "filename", "sentence-case", or "first-h1"
+  showPageNumbers: false, // Show page numbers at bottom of each page
+  pageNumberAlignment: "center" // "left", "center", or "right"
 };
 
 // Confirmation modal for overwrite warning
@@ -464,6 +466,36 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
     return styles;
   }
 
+  // Helper function to calculate vertical space needed for footnotes
+  calculateFootnoteSpace(pageNumber, pageFootnotes, footnoteDefinitions, doc, maxWidth) {
+    if (!pageFootnotes[pageNumber] || pageFootnotes[pageNumber].length === 0) {
+      return 0; // No footnotes on this page
+    }
+
+    let totalHeight = 0;
+
+    // Space for separator line and gap above it
+    totalHeight += 5; // 5mm spacing before separator
+    totalHeight += 3; // 3mm gap after separator
+
+    // Calculate space for each footnote
+    for (const ref of pageFootnotes[pageNumber]) {
+      const footnoteText = footnoteDefinitions[ref] || "";
+      const footnotePrefix = `${ref}. `;
+
+      // Calculate prefix width
+      const prefixWidth = doc.getTextWidth(footnotePrefix);
+
+      // Calculate how many lines this footnote will take
+      const wrappedText = doc.splitTextToSize(footnoteText, maxWidth - prefixWidth);
+
+      // Each line is 4.0mm in height
+      totalHeight += wrappedText.length * 4.0;
+    }
+
+    return totalHeight;
+  }
+
   async generatePDF(title, markdown) {
     await this.loadJsPDF();
     const jsPDF = window.jspdf.jsPDF;
@@ -474,6 +506,10 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
     const margin = this.getPageMargins(pageWidth);
     const maxWidth = pageWidth - margin * 2;
     let yPosition = margin;
+
+    // Track footnotes per page
+    const pageFootnotes = {}; // { pageNumber: [footnoteRefs] }
+    const pageMaxY = {}; // Track maximum Y position per page
 
     // Apply background
     if (themeStyles.backgroundColor) {
@@ -507,8 +543,15 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
 
     // Content styling
     const lines = this.markdownToPlainText(markdown);
+    const footnoteDefinitions = this._footnotes || {};
+
     for (const line of lines) {
-      if (yPosition > pageHeight - margin - 10) {
+      // Calculate space needed for footnotes on current page
+      const currentPage = doc.internal.getCurrentPageInfo().pageNumber;
+      const footnoteSpace = this.calculateFootnoteSpace(currentPage, pageFootnotes, footnoteDefinitions, doc, maxWidth);
+      const effectiveMaxY = pageHeight - margin - footnoteSpace - 10;
+
+      if (yPosition > effectiveMaxY) {
         doc.addPage();
         yPosition = margin;
         if (themeStyles.backgroundColor) {
@@ -603,6 +646,18 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
           fontFamily = "Courier";
           fontSize = baseFontSize - 1;
           textColor = themeStyles.codeColor;
+        } else if (segment.style === "superscript") {
+          fontSize = baseFontSize * 0.7; // Smaller font for superscript
+          // Track footnote reference on current page
+          if (segment.footnoteRef) {
+            const currentPage = doc.internal.getCurrentPageInfo().pageNumber;
+            if (!pageFootnotes[currentPage]) {
+              pageFootnotes[currentPage] = [];
+            }
+            if (!pageFootnotes[currentPage].includes(segment.footnoteRef)) {
+              pageFootnotes[currentPage].push(segment.footnoteRef);
+            }
+          }
         } else if (isListMarker) {
           textColor = themeStyles.listMarkerColor;
           // Apply opacity based on nesting level for bullets
@@ -679,7 +734,9 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
               if (item.opacity < 1.0) {
                 doc.setGState(new doc.GState({ opacity: item.opacity }));
               }
-              doc.text(item.text, renderX, yPosition);
+              // Render superscript slightly raised
+              const yOffset = item.isSuperscript ? -2 : 0;
+              doc.text(item.text, renderX, yPosition + yOffset);
               // Reset opacity
               if (item.opacity < 1.0) {
                 doc.setGState(new doc.GState({ opacity: 1.0 }));
@@ -694,7 +751,11 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
             isFirstLine = false;
 
             // Check if we need a new page
-            if (yPosition > pageHeight - margin - 10) {
+            const currentPageInner = doc.internal.getCurrentPageInfo().pageNumber;
+            const footnoteSpaceInner = this.calculateFootnoteSpace(currentPageInner, pageFootnotes, footnoteDefinitions, doc, maxWidth);
+            const effectiveMaxYInner = pageHeight - margin - footnoteSpaceInner - 10;
+
+            if (yPosition > effectiveMaxYInner) {
               doc.addPage();
               yPosition = margin;
               if (themeStyles.backgroundColor) {
@@ -719,7 +780,8 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
             fontSize: fontSize,
             textColor: textColor,
             width: wordWidth,
-            opacity: Array.isArray(parsedColor) && parsedColor.length === 4 ? parsedColor[3] : 1.0
+            opacity: Array.isArray(parsedColor) && parsedColor.length === 4 ? parsedColor[3] : 1.0,
+            isSuperscript: segment.style === "superscript"
           });
           currentLineWidth += wordWidth;
         }
@@ -743,7 +805,9 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
           if (item.opacity < 1.0) {
             doc.setGState(new doc.GState({ opacity: item.opacity }));
           }
-          doc.text(item.text, renderX, yPosition);
+          // Render superscript slightly raised
+          const yOffset = item.isSuperscript ? -2 : 0;
+          doc.text(item.text, renderX, yPosition + yOffset);
           // Reset opacity
           if (item.opacity < 1.0) {
             doc.setGState(new doc.GState({ opacity: 1.0 }));
@@ -769,7 +833,102 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
 
       // Add extra spacing after the paragraph
       yPosition += paragraphSpacing;
+
+      // Track maximum Y position for current page
+      const trackingPage = doc.internal.getCurrentPageInfo().pageNumber;
+      if (!pageMaxY[trackingPage] || yPosition > pageMaxY[trackingPage]) {
+        pageMaxY[trackingPage] = yPosition;
+      }
     }
+
+    // Render footnotes on each page
+    const totalPages = doc.internal.pages.length - 1; // -1 because first page is blank
+
+    for (let i = 1; i <= totalPages; i++) {
+      doc.setPage(i);
+
+      // Render footnotes for this page if any
+      if (pageFootnotes[i] && pageFootnotes[i].length > 0) {
+        const textColor = this.parseColorForPDF(themeStyles.textColor);
+        doc.setFont(themeStyles.fontFamily, "normal");
+        doc.setFontSize(9);
+
+        if (Array.isArray(textColor)) {
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        } else {
+          doc.setTextColor(textColor);
+        }
+
+        // Position footnotes after the content with some spacing
+        // Ensure footnotes don't go below a reasonable position (leave room for page numbers)
+        const contentEndY = pageMaxY[i] || margin;
+        const footnoteSeparatorY = contentEndY + 5;
+
+        // Draw a separator line above footnotes
+        doc.setLineWidth(0.2);
+        doc.line(margin, footnoteSeparatorY, margin + 30, footnoteSeparatorY);
+
+        // Render each footnote
+        let footnoteY = footnoteSeparatorY + 3;
+        for (const ref of pageFootnotes[i]) {
+          const footnoteText = footnoteDefinitions[ref] || "";
+          const footnotePrefix = `${ref}. `;
+
+          // Calculate the width of the footnote number prefix
+          const prefixWidth = doc.getTextWidth(footnotePrefix);
+
+          // Split the footnote text (without the prefix) for wrapping
+          const wrappedText = doc.splitTextToSize(footnoteText, maxWidth - prefixWidth);
+
+          // Render first line with the prefix
+          doc.text(footnotePrefix + wrappedText[0], margin, footnoteY);
+
+          // Render remaining wrapped lines indented to align with text
+          for (let j = 1; j < wrappedText.length; j++) {
+            footnoteY += 3.5;
+            doc.text(wrappedText[j], margin + prefixWidth, footnoteY);
+          }
+
+          footnoteY += 3.5;
+        }
+      }
+    }
+
+    // Add page numbers if enabled
+    if (this.settings.showPageNumbers) {
+      const textColor = this.parseColorForPDF(themeStyles.textColor);
+
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFont(themeStyles.fontFamily, "normal");
+        doc.setFontSize(10);
+
+        if (Array.isArray(textColor)) {
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        } else {
+          doc.setTextColor(textColor);
+        }
+
+        const pageText = `${i}`;
+        const textWidth = doc.getTextWidth(pageText);
+        let xPosition;
+
+        // Calculate x position based on alignment setting
+        if (this.settings.pageNumberAlignment === "left") {
+          xPosition = margin;
+        } else if (this.settings.pageNumberAlignment === "right") {
+          xPosition = pageWidth - margin - textWidth;
+        } else {
+          // center (default)
+          xPosition = (pageWidth - textWidth) / 2;
+        }
+
+        const yPositionPageNumber = pageHeight - margin / 2;
+
+        doc.text(pageText, xPosition, yPositionPageNumber);
+      }
+    }
+
     return doc.output("blob");
   }
 
@@ -847,12 +1006,17 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
     // Handle emojis first (remove or replace)
     text = this.handleEmojis(text);
 
+    // Replace footnote references with superscript numbers
+    text = text.replace(/\[\^([^\]]+)\]/g, (_match, ref) => {
+      return `^${ref}^`; // Temporary marker for superscript
+    });
+
     const segments = [];
     let currentPos = 0;
 
-    // Pattern matches: **bold**, *italic*, _italic_, `code`, [link](url)
-    // Updated regex to handle underscores for italics
-    const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(_(.+?)_)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))/g;
+    // Pattern matches: **bold**, *italic*, _italic_, `code`, [link](url), ^ref^ (footnote)
+    // Updated regex to handle underscores for italics and footnote markers
+    const regex = /(\*\*(.+?)\*\*)|(\*(.+?)\*)|(_(.+?)_)|(`(.+?)`)|(\[(.+?)\]\((.+?)\))|(\^([^\^]+)\^)/g;
     let match;
 
     while ((match = regex.exec(text)) !== null) {
@@ -880,6 +1044,9 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
       } else if (match[9]) {
         // Link: [text](url) - just show the text
         segments.push({ text: match[10], style: "normal" });
+      } else if (match[12]) {
+        // Footnote reference: ^ref^
+        segments.push({ text: match[13], style: "superscript", footnoteRef: match[13] });
       }
 
       currentPos = regex.lastIndex;
@@ -903,8 +1070,26 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
 
   markdownToPlainText(markdown) {
     const lines = [];
+    const footnotes = {}; // Store footnote definitions
     const rawLines = markdown.split("\n");
+
+    // First pass: collect all footnote definitions
     for (let rawLine of rawLines) {
+      const footnoteDefMatch = rawLine.trim().match(/^\[\^([^\]]+)\]:\s*(.+)$/);
+      if (footnoteDefMatch) {
+        footnotes[footnoteDefMatch[1]] = footnoteDefMatch[2];
+      }
+    }
+
+    // Store footnotes for later use in PDF generation
+    this._footnotes = footnotes;
+
+    for (let rawLine of rawLines) {
+      // Skip footnote definition lines
+      if (rawLine.trim().match(/^\[\^([^\]]+)\]:/)) {
+        continue;
+      }
+
       // Detect indentation level before trimming
       const indentMatch = rawLine.match(/^(\s*)/);
       const indentSpaces = indentMatch ? indentMatch[1].length : 0;
@@ -1223,6 +1408,31 @@ var SharePDFSettingTab = class extends import_obsidian.PluginSettingTab {
           .setValue(this.plugin.settings.warnOnOverwrite)
           .onChange(async (value) => {
             this.plugin.settings.warnOnOverwrite = value;
+            await this.plugin.saveSettings();
+          })
+      );
+    new import_obsidian.Setting(containerEl)
+      .setName("Show page numbers")
+      .setDesc("Display page numbers at the bottom of each page")
+      .addToggle((toggle) =>
+        toggle
+          .setValue(this.plugin.settings.showPageNumbers)
+          .onChange(async (value) => {
+            this.plugin.settings.showPageNumbers = value;
+            await this.plugin.saveSettings();
+          })
+      );
+    new import_obsidian.Setting(containerEl)
+      .setName("Page number alignment")
+      .setDesc("Horizontal alignment for page numbers")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("left", "Left")
+          .addOption("center", "Center")
+          .addOption("right", "Right")
+          .setValue(this.plugin.settings.pageNumberAlignment)
+          .onChange(async (value) => {
+            this.plugin.settings.pageNumberAlignment = value;
             await this.plugin.saveSettings();
           })
       );

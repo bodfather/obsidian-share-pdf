@@ -5,8 +5,12 @@
   "cssOverride": "body {\n  --font-text-theme: Helvetica;\n}",
   "useTheme": true,
   "replaceEmojis": false,
-  "colorMode": "auto",
+  "colorMode": "light",
   "includeTitle": false,
   "removeWikilinks": false,
-  "marginWidth": "normal"
+  "marginWidth": "normal",
+  "warnOnOverwrite": true,
+  "pdfNamingStyle": "sentence-case-date",
+  "showPageNumbers": true,
+  "pageNumberAlignment": "right"
 }

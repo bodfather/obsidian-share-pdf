@@ -1,7 +1,7 @@
 {
   "id": "share-to-pdf",
   "name": "Share to PDF",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "minAppVersion": "0.15.0",
   "description": "Convert and save your notes as beautifully formatted PDFs with full markdown support. Works on desktop and mobile with native sharing.",
   "author": "bodfather",
