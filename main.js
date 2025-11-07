@@ -41,15 +41,17 @@ var DEFAULT_SETTINGS = {
   includeTitle: true, // Show document name at top of PDF
   removeWikilinks: false, // Remove all wikilinks from PDF
   marginWidth: "normal", // "narrow", "normal", "wide"
-  warnOnOverwrite: true // Warn before overwriting existing PDFs
+  warnOnOverwrite: true, // Warn before overwriting existing PDFs
+  pdfNamingStyle: "filename" // "filename", "sentence-case", or "first-h1"
 };
 
 // Confirmation modal for overwrite warning
 var ConfirmOverwriteModal = class extends import_obsidian.Modal {
-  constructor(app, filename, onConfirm) {
+  constructor(app, filename, onConfirm, onRename) {
     super(app);
     this.filename = filename;
     this.onConfirm = onConfirm;
+    this.onRename = onRename;
   }
 
   onOpen() {
@@ -57,7 +59,19 @@ var ConfirmOverwriteModal = class extends import_obsidian.Modal {
     contentEl.empty();
 
     contentEl.createEl("h2", { text: "File already exists" });
-    contentEl.createEl("p", { text: `The file "${this.filename}.pdf" already exists. Do you want to overwrite it?` });
+    contentEl.createEl("p", { text: `The file "${this.filename}.pdf" already exists.` });
+
+    // Add input field for new filename
+    const inputContainer = contentEl.createDiv({ cls: "modal-input-container" });
+    inputContainer.createEl("label", { text: "New filename:" });
+    const inputEl = inputContainer.createEl("input", {
+      type: "text",
+      value: this.filename,
+      cls: "modal-input"
+    });
+    inputEl.style.width = "100%";
+    inputEl.style.marginTop = "8px";
+    inputEl.style.marginBottom = "16px";
 
     const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
 
@@ -66,10 +80,39 @@ var ConfirmOverwriteModal = class extends import_obsidian.Modal {
       this.close();
     });
 
+    const renameButton = buttonContainer.createEl("button", { text: "Rename" });
+    renameButton.addEventListener("click", () => {
+      const newName = inputEl.value.trim();
+      if (newName && newName !== this.filename) {
+        this.onRename(newName);
+        this.close();
+      } else if (newName === this.filename) {
+        // Same name, treat as overwrite
+        this.onConfirm();
+        this.close();
+      } else {
+        new import_obsidian.Notice("Please enter a valid filename");
+      }
+    });
+
     const confirmButton = buttonContainer.createEl("button", { text: "Overwrite", cls: "mod-cta" });
     confirmButton.addEventListener("click", () => {
       this.onConfirm();
       this.close();
+    });
+
+    // Focus and select the input field
+    setTimeout(() => {
+      inputEl.focus();
+      inputEl.select();
+    }, 10);
+
+    // Handle Enter key in input
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        renameButton.click();
+      }
     });
   }
 
@@ -78,6 +121,52 @@ var ConfirmOverwriteModal = class extends import_obsidian.Modal {
     contentEl.empty();
   }
 };
+
+// Helper functions for PDF naming
+function convertToSentenceCaseKeepDate(filename) {
+  // Match date prefix (YYYY-MM-DD-) and capture the rest
+  const match = filename.match(/^(\d{4}-\d{2}-\d{2})-(.+)$/);
+  if (!match) return filename; // No date, return as-is
+
+  const date = match[1];
+  let rest = match[2];
+
+  // Replace hyphens/underscores with spaces
+  rest = rest.replace(/[-_]/g, ' ');
+
+  // Sentence case each word
+  rest = rest.split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+
+  return `${date} ${rest}`;
+}
+
+function convertToSentenceCase(filename) {
+  // Remove date prefix if present (e.g., "2024-01-15-")
+  let cleaned = filename.replace(/^\d{4}-\d{2}-\d{2}-/, '');
+
+  // Replace hyphens and underscores with spaces
+  cleaned = cleaned.replace(/[-_]/g, ' ');
+
+  // Capitalize first letter of each word
+  return cleaned.split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+function extractFirstH1(content) {
+  // Remove frontmatter first
+  const withoutFrontmatter = content.replace(/^---\n[\s\S]*?\n---\n/, '');
+
+  // Look for first H1 (# Title)
+  const h1Match = withoutFrontmatter.match(/^#\s+(.+)$/m);
+  if (h1Match) {
+    return h1Match[1].trim();
+  }
+
+  return null;
+}
 
 var SharePDFPlugin = class extends import_obsidian.Plugin {
   async onload() {
@@ -121,8 +210,26 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
       if (!this.settings.includeFrontmatter) {
         content = content.replace(/^---\n[\s\S]*?\n---\n/, "");
       }
-      const pdfBlob = await this.generatePDF(file.basename, content);
-      await this.sharePDF(pdfBlob, file.basename);
+
+      // Determine PDF filename based on naming style setting
+      let pdfName = file.basename;
+      if (this.settings.pdfNamingStyle === "sentence-case") {
+        pdfName = convertToSentenceCase(file.basename);
+      } else if (this.settings.pdfNamingStyle === "sentence-case-date") {
+        pdfName = convertToSentenceCaseKeepDate(file.basename);
+      } else if (this.settings.pdfNamingStyle === "first-h1") {
+        const h1Title = extractFirstH1(content);
+        if (h1Title) {
+          pdfName = h1Title;
+        } else {
+          // Fallback to sentence case if no H1 found
+          pdfName = convertToSentenceCase(file.basename);
+        }
+      }
+      // else use filename as-is (default)
+
+      const pdfBlob = await this.generatePDF(pdfName, content);
+      await this.sharePDF(pdfBlob, pdfName);
     } catch (error) {
       console.error("Error sharing:", error);
       new import_obsidian.Notice(`Error: ${error.message}`);
@@ -168,6 +275,9 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
   // Helper to parse CSS color to jsPDF-compatible format
   parseColorForPDF(cssColor) {
     if (!cssColor) return null;
+
+    // If already an array (e.g., [r, g, b] or [r, g, b, a]), return as-is
+    if (Array.isArray(cssColor)) return cssColor;
 
     // Handle hex colors
     if (cssColor.startsWith('#')) {
@@ -426,7 +536,10 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
       } else if (line.type === "blockquote") {
         indent = 6; // Indent blockquotes
       } else if (line.isList) {
-        indent = themeStyles.listIndent;
+        // Apply indentation based on nesting level
+        const nestLevel = line.nestLevel || 0;
+        // Each nest level gets one additional indent unit
+        indent = themeStyles.listIndent * (1 + nestLevel);
       }
 
       // Calculate line height based on content type
@@ -454,13 +567,17 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
       let currentLine = [];
       let currentLineWidth = 0;
       let isFirstLine = true;
-      let bulletWidth = 0;
+      let listMarkerWidth = 0;
 
-      // Calculate bullet width for list items
-      if (line.isList && line.segments.length > 0 && line.segments[0].text === "•  ") {
-        doc.setFont(themeStyles.fontFamily, "normal");
-        doc.setFontSize(baseFontSize);
-        bulletWidth = doc.getTextWidth("•  ");
+      // Calculate list marker width for list items (bullets or numbers)
+      if (line.isList && line.segments.length > 0) {
+        const firstSegment = line.segments[0].text;
+        // Check if first segment is a bullet or number
+        if (firstSegment === "•  " || /^\d+\.\s+$/.test(firstSegment)) {
+          doc.setFont(themeStyles.fontFamily, "normal");
+          doc.setFontSize(baseFontSize);
+          listMarkerWidth = doc.getTextWidth(firstSegment);
+        }
       }
 
       for (const segment of line.segments) {
@@ -470,8 +587,8 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
         let fontSize = baseFontSize;
         let textColor = baseTextColor;
 
-        // Check if this is a bullet marker segment
-        const isBulletMarker = line.isList && segment.text === "•  ";
+        // Check if this is a list marker segment (bullet or number)
+        const isListMarker = line.isList && (segment.text === "•  " || /^\d+\.\s+$/.test(segment.text));
 
         if (line.type === "heading") {
           fontStyle = "bold";
@@ -486,15 +603,39 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
           fontFamily = "Courier";
           fontSize = baseFontSize - 1;
           textColor = themeStyles.codeColor;
-        } else if (isBulletMarker) {
+        } else if (isListMarker) {
           textColor = themeStyles.listMarkerColor;
+          // Apply opacity based on nesting level for bullets
+          if (segment.isBullet) {
+            const nestLevel = line.nestLevel || 0;
+            if (nestLevel >= 2) {
+              // Level 2+: 50% opacity (lightest)
+              const parsed = this.parseColorForPDF(textColor);
+              if (Array.isArray(parsed)) {
+                textColor = [parsed[0], parsed[1], parsed[2], 0.5];
+              }
+            } else if (nestLevel === 1) {
+              // Level 1: 75% opacity (lighter)
+              const parsed = this.parseColorForPDF(textColor);
+              if (Array.isArray(parsed)) {
+                textColor = [parsed[0], parsed[1], parsed[2], 0.75];
+              }
+            }
+            // Level 0 keeps default opacity (1.0)
+          }
         }
 
         doc.setFont(fontFamily, fontStyle);
         doc.setFontSize(fontSize);
         const parsedColor = this.parseColorForPDF(textColor);
         if (Array.isArray(parsedColor)) {
-          doc.setTextColor(parsedColor[0], parsedColor[1], parsedColor[2]);
+          if (parsedColor.length === 4) {
+            // Has alpha channel
+            doc.setTextColor(parsedColor[0], parsedColor[1], parsedColor[2]);
+            doc.setGState(new doc.GState({ opacity: parsedColor[3] }));
+          } else {
+            doc.setTextColor(parsedColor[0], parsedColor[1], parsedColor[2]);
+          }
         } else {
           doc.setTextColor(parsedColor);
         }
@@ -515,14 +656,14 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
           const word = i === words.length - 1 ? words[i] : words[i] + ' ';
           const wordWidth = doc.getTextWidth(word);
 
-          // For wrapped lines in lists, account for bullet width in available space
-          const effectiveIndent = (line.isList && !isFirstLine) ? indent + bulletWidth : indent;
+          // For wrapped lines in lists, account for list marker width in available space
+          const effectiveIndent = (line.isList && !isFirstLine) ? indent + listMarkerWidth : indent;
           const availableWidth = maxWidth - effectiveIndent;
 
           // Check if word fits on current line
           if (currentLineWidth + wordWidth > availableWidth && currentLine.length > 0) {
             // Render current line
-            const renderIndent = (line.isList && !isFirstLine) ? indent + bulletWidth : indent;
+            const renderIndent = (line.isList && !isFirstLine) ? indent + listMarkerWidth : indent;
             let renderX = margin + renderIndent;
 
             for (const item of currentLine) {
@@ -534,7 +675,15 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
               } else {
                 doc.setTextColor(itemColor);
               }
+              // Apply opacity if needed
+              if (item.opacity < 1.0) {
+                doc.setGState(new doc.GState({ opacity: item.opacity }));
+              }
               doc.text(item.text, renderX, yPosition);
+              // Reset opacity
+              if (item.opacity < 1.0) {
+                doc.setGState(new doc.GState({ opacity: 1.0 }));
+              }
               renderX += item.width;
             }
 
@@ -569,7 +718,8 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
             fontStyle: fontStyle,
             fontSize: fontSize,
             textColor: textColor,
-            width: wordWidth
+            width: wordWidth,
+            opacity: Array.isArray(parsedColor) && parsedColor.length === 4 ? parsedColor[3] : 1.0
           });
           currentLineWidth += wordWidth;
         }
@@ -577,7 +727,7 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
 
       // Render remaining line
       if (currentLine.length > 0) {
-        const renderIndent = (line.isList && !isFirstLine) ? indent + bulletWidth : indent;
+        const renderIndent = (line.isList && !isFirstLine) ? indent + listMarkerWidth : indent;
         let renderX = margin + renderIndent;
 
         for (const item of currentLine) {
@@ -589,7 +739,15 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
           } else {
             doc.setTextColor(itemColor);
           }
+          // Apply opacity if needed
+          if (item.opacity < 1.0) {
+            doc.setGState(new doc.GState({ opacity: item.opacity }));
+          }
           doc.text(item.text, renderX, yPosition);
+          // Reset opacity
+          if (item.opacity < 1.0) {
+            doc.setGState(new doc.GState({ opacity: 1.0 }));
+          }
           renderX += item.width;
         }
         yPosition += lineHeight;
@@ -746,8 +904,24 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
   markdownToPlainText(markdown) {
     const lines = [];
     const rawLines = markdown.split("\n");
-    for (let line of rawLines) {
-      line = line.trim();
+    for (let rawLine of rawLines) {
+      // Detect indentation level before trimming
+      const indentMatch = rawLine.match(/^(\s*)/);
+      const indentSpaces = indentMatch ? indentMatch[1].length : 0;
+      // Calculate nesting level (handle tabs and varying space counts)
+      // Tabs are typically 4 spaces, so normalize to levels
+      let nestLevel = 0;
+      if (indentSpaces > 0) {
+        // If using tabs or 4+ spaces, treat as 1 level per 4 spaces
+        // If using 2-3 spaces, treat as 1 level per 2 spaces
+        if (indentSpaces >= 4) {
+          nestLevel = Math.floor(indentSpaces / 4);
+        } else {
+          nestLevel = Math.floor(indentSpaces / 2);
+        }
+      }
+
+      let line = rawLine.trim();
       if (!line) {
         lines.push({ segments: [{ text: "", style: "normal" }], type: "normal" });
         continue;
@@ -788,21 +962,26 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
       // Handle list markers
       const listMatch = line.match(/^[-*+]\s+(.+)/);
       if (listMatch) {
+        // All levels use bullet, but with different opacity
+        const bulletChar = "•  ";
+
         lines.push({
-          segments: [{ text: "•  ", style: "normal" }, ...this.parseInlineFormatting(listMatch[1])],
+          segments: [{ text: bulletChar, style: "normal", isBullet: true }, ...this.parseInlineFormatting(listMatch[1])],
           type: "list",
-          isList: true
+          isList: true,
+          nestLevel: nestLevel
         });
         continue;
       }
 
       // Handle numbered lists
-      const numberedMatch = line.match(/^\d+\.\s+(.+)/);
+      const numberedMatch = line.match(/^(\d+)\.\s+(.+)/);
       if (numberedMatch) {
         lines.push({
-          segments: this.parseInlineFormatting(numberedMatch[1]),
+          segments: [{ text: `${numberedMatch[1]}.  `, style: "normal" }, ...this.parseInlineFormatting(numberedMatch[2])],
           type: "list",
-          isList: true
+          isList: true,
+          nestLevel: nestLevel
         });
         continue;
       }
@@ -839,11 +1018,20 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
       if (fileExists && this.settings.warnOnOverwrite) {
         // Show confirmation modal
         return new Promise((resolve) => {
-          const modal = new ConfirmOverwriteModal(this.app, filename, async () => {
-            // User confirmed, proceed with save
-            await this.savePDFFile(blob, pdfPath);
-            resolve();
-          });
+          const modal = new ConfirmOverwriteModal(
+            this.app,
+            filename,
+            async () => {
+              // User confirmed overwrite, proceed with save
+              await this.savePDFFile(blob, pdfPath);
+              resolve();
+            },
+            async (newFilename) => {
+              // User wants to rename, recursively call with new name
+              await this.sharePDF(blob, newFilename);
+              resolve();
+            }
+          );
           modal.open();
         });
       }
@@ -913,6 +1101,21 @@ var SharePDFSettingTab = class extends import_obsidian.PluginSettingTab {
           .setValue(this.plugin.settings.pdfFolder)
           .onChange(async (value) => {
             this.plugin.settings.pdfFolder = value || "PDFs";
+            await this.plugin.saveSettings();
+          })
+      );
+    new import_obsidian.Setting(containerEl)
+      .setName("PDF naming style")
+      .setDesc("Choose how to name the PDF file when sharing")
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOption("filename", "Use filename")
+          .addOption("sentence-case", "Sentence-case filename")
+          .addOption("sentence-case-date", "Sentence-case (date prefix)")
+          .addOption("first-h1", "Use first H1 in document")
+          .setValue(this.plugin.settings.pdfNamingStyle)
+          .onChange(async (value) => {
+            this.plugin.settings.pdfNamingStyle = value;
             await this.plugin.saveSettings();
           })
       );
