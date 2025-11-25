@@ -1152,8 +1152,9 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
 
         lines.push({
           segments: [{ text: bulletChar, style: "normal", isBullet: true }, ...this.parseInlineFormatting(listMatch[1])],
-          type: "list",
+          type: isBlockquote ? "blockquote" : "list",
           isList: true,
+          isBlockquote: isBlockquote,
           nestLevel: nestLevel
         });
         continue;
@@ -1164,8 +1165,9 @@ var SharePDFPlugin = class extends import_obsidian.Plugin {
       if (numberedMatch) {
         lines.push({
           segments: [{ text: `${numberedMatch[1]}.  `, style: "normal" }, ...this.parseInlineFormatting(numberedMatch[2])],
-          type: "list",
+          type: isBlockquote ? "blockquote" : "list",
           isList: true,
+          isBlockquote: isBlockquote,
           nestLevel: nestLevel
         });
         continue;
